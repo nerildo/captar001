@@ -21,20 +21,39 @@ AutoBlogPro permite aos usuários definir nichos, associar categorias e gerar ar
 ## Funcionalidades Implementadas (Versão 0.1.0)
 
 *   **Gerenciamento de Nichos:**
-    *   Criação de um tipo de post personalizado "Nichos".
+    *   Criação de um tipo de post personalizado "Nichos" (CPT `niche`).
     *   Capacidade de adicionar, editar e excluir nichos.
-    *   Associação de categorias do WordPress a cada nicho através de uma metabox na tela de edição do nicho.
+    *   Associação de múltiplas categorias do WordPress a cada nicho através de uma metabox dedicada na tela de edição do nicho.
 *   **Configuração da API OpenAI:**
-    *   Página de configurações dedicada ("AutoBlogPro > Configurações") para inserir e salvar a chave da API OpenAI.
-*   **Geração de Artigos (Modo Automático - Estrutura Inicial):**
-    *   Interface de usuário ("AutoBlogPro > Gerar Artigos") para selecionar um nicho, definir o número de artigos e palavras-chave alvo.
-    *   A geração de conteúdo real ainda não está implementada; o sistema atualmente simula o processo e registra a intenção nos logs (se o debug estiver ativo).
+    *   Página de configurações ("AutoBlogPro > Configurações") para inserir e salvar de forma segura a chave da API OpenAI.
+*   **Geração de Artigos:**
+    *   **Integração com API OpenAI:** Utiliza o modelo `gpt-3.5-turbo` (ou configurável futuramente) para gerar texto para os artigos.
+    *   **Formulário de Geração Expandido:** Interface em "AutoBlogPro > Gerar Artigos" permite ao usuário especificar:
+        *   Nicho de origem (para herdar categorias).
+        *   Palavras-chave alvo para o conteúdo.
+        *   Tamanho Médio Estimado do artigo (em palavras).
+        *   Tom de Voz (ex: Formal, Informal, Criativo).
+        *   Estilo de Escrita (ex: Informativo, Narrativo, Tutorial).
+        *   Nível de Criatividade (controla o parâmetro `temperature` da API).
+        *   Palavras-chave Negativas (termos a serem evitados pela IA).
+        *   Idioma de geração do conteúdo.
+    *   **Construção Dinâmica de Prompts:** Os parâmetros do formulário são usados para construir prompts detalhados (de sistema e de usuário) para a API OpenAI, visando um melhor controle sobre o resultado da geração.
+    *   **Criação de Posts (Rascunhos):** O conteúdo gerado pela API é automaticamente salvo como um novo post do WordPress com status "rascunho".
+    *   **Atribuição de Dados ao Post:**
+        *   O título do post é gerado com base nas palavras-chave fornecidas.
+        *   As categorias associadas ao nicho selecionado são automaticamente atribuídas ao novo post.
+        *   O ID do nicho de origem é salvo como metadado (`_autobp_generated_from_niche_id`) no post gerado para rastreabilidade.
+    *   **Feedback ao Usuário Aprimorado:** Mensagens claras de sucesso (com link para editar o rascunho em nova aba) e de erro (incluindo detalhes de erros da API e códigos de erro) são exibidas após a tentativa de geração.
 
 ## Próximos Passos
 
-*   Integração real com a API da OpenAI para geração de conteúdo.
-*   Criação de rascunhos de posts no WordPress com o conteúdo gerado.
-*   Mais opções de personalização para a geração de artigos.
+*   Implementar a lógica para gerar múltiplos artigos com base no campo "Número de Artigos a Gerar".
+*   Permitir a seleção do modelo da OpenAI (GPT-3.5-turbo, GPT-4, etc.) na página de configurações.
+*   Opção para publicar diretamente ou agendar posts (além de salvar como rascunho).
+*   Melhorias na geração de títulos (ex: solicitar à IA um título otimizado).
+*   Refinamento contínuo da engenharia de prompts com base nos resultados.
+*   Adicionar a capacidade de definir um "público-alvo" para os artigos.
+*   Internacionalização completa do plugin.
 
 ---
 *Este é um projeto em desenvolvimento.*
