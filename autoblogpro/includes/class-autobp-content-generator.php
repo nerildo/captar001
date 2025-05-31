@@ -106,6 +106,14 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
          */
         private $language;
 
+        /**
+         * Número desejado de seções H2 no artigo.
+         * @since 0.1.0
+         * @access private
+         * @var int
+         */
+        private $num_h2_sections;
+
 
         /**
          * Construtor da classe AutoBP_Content_Generator.
@@ -125,11 +133,12 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
          * @param float  $creativity Nível de criatividade (temperatura da API, 0.0 a 2.0).
          * @param string $negative_keywords Palavras-chave a serem evitadas.
          * @param string $language Idioma para a geração do conteúdo (ex: 'pt-BR').
+         * @param int    $num_h2_sections Número desejado de seções H2.
          */
-        public function __construct( $api_key, $niche_id, $num_articles, $target_keywords, $article_length, $tone_of_voice, $writing_style, $creativity, $negative_keywords, $language ) {
+        public function __construct( $api_key, $niche_id, $num_articles, $target_keywords, $article_length, $tone_of_voice, $writing_style, $creativity, $negative_keywords, $language, $num_h2_sections ) {
             $this->api_key = $api_key;
             $this->niche_id = $niche_id;
-            $this->num_articles = $num_articles; // Ainda não usado diretamente em generate() para loop
+            $this->num_articles = $num_articles;
             $this->target_keywords = $target_keywords;
             $this->article_length = $article_length;
             $this->tone_of_voice = $tone_of_voice;
@@ -137,6 +146,7 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
             $this->creativity = $creativity;
             $this->negative_keywords = $negative_keywords;
             $this->language = $language;
+            $this->num_h2_sections = $num_h2_sections;
 
             // Validação inicial dos parâmetros pode ser feita aqui, se desejado,
             // ou deixar para o método generate() lidar com isso de forma mais completa.
@@ -170,9 +180,10 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
          *
          * @since 0.1.0
          * @access public
+         * @param int $article_index O índice do artigo atual no lote de geração (1-indexado).
          * @return int|WP_Error O ID do post gerado em caso de sucesso, ou `WP_Error` em caso de falha.
          */
-        public function generate() {
+        public function generate( $article_index = 1 ) {
             // Validação robusta dos parâmetros de entrada.
             if ( empty( $this->api_key ) ) {
                 return new WP_Error( 'api_key_missing', __( 'Configuração pendente: A chave da API OpenAI não foi definida. Por favor, adicione-a na página de configurações do AutoBlogPro.', 'autoblogpro' ) );
@@ -193,6 +204,9 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
             }
             if ( empty( $this->language ) ) {
                 return new WP_Error( 'language_missing', __( 'Dados incompletos: O idioma de geração do artigo é obrigatório. Por favor, especifique o idioma.', 'autoblogpro' ) );
+            }
+            if ( ! is_numeric( $this->num_h2_sections ) || $this->num_h2_sections < 1 || $this->num_h2_sections > 10 ) {
+                return new WP_Error( 'num_h2_sections_invalid', __( 'Parâmetro inválido: O número de seções H2 deve ser um valor numérico entre 1 e 10.', 'autoblogpro' ) );
             }
             // $this->num_articles não é usado diretamente aqui, pois geramos um artigo por vez.
             // O loop para múltiplos artigos será gerenciado externamente, se necessário.
@@ -218,6 +232,10 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
             if ( ! empty( $this->negative_keywords ) ) {
                 // translators: %s: Lista de palavras-chave negativas.
                 $user_prompt_lines[] = sprintf( __("Evite estritamente mencionar ou discutir os seguintes tópicos ou palavras: %s.", 'autoblogpro'), $this->negative_keywords );
+            }
+            if ( $this->num_h2_sections > 0 ) {
+                // translators: %d: Número de seções H2 desejadas.
+                $user_prompt_lines[] = sprintf( __("O artigo deve ser estruturado em exatamente %d seções principais. Cada seção principal deve ser claramente introduzida por um subtítulo H2 (usando a formatação markdown '## Título da Seção').", 'autoblogpro'), $this->num_h2_sections );
             }
             $user_prompt_lines[] = __("Certifique-se de que o conteúdo seja original, envolvente, bem estruturado e otimizado para SEO quando apropriado. Inclua um título claro e atraente para o artigo.", 'autoblogpro');
 
@@ -319,15 +337,22 @@ if ( ! class_exists( 'AutoBP_Content_Generator' ) ) {
                 }
 
                 // Conteúdo recebido, agora vamos criar o post
-                $post_title = sanitize_text_field( "Artigo sobre: " . $this->target_keywords );
-                // Se as palavras-chave forem muito longas, podemos querer um título mais curto ou gerado pela IA.
-                // Por enquanto, vamos truncar se for muito longo para um título.
-                if ( mb_strlen( $post_title ) > 200 ) { // Limite arbitrário para o comprimento do título
-                    $post_title = mb_substr( $post_title, 0, 197 ) . '...';
+                $base_post_title = sanitize_text_field( "Artigo sobre: " . $this->target_keywords );
+
+                // Adiciona um sufixo ao título se estiver gerando múltiplos artigos neste lote
+                // e o total de artigos no lote ($this->num_articles) for maior que 1.
+                $final_post_title = $base_post_title;
+                if ( $this->num_articles > 1 ) {
+                    $final_post_title .= " (#" . $article_index . "/" . $this->num_articles . ")";
+                }
+
+                // Trunca o título final se for muito longo.
+                if ( mb_strlen( $final_post_title ) > 200 ) { // Limite arbitrário para o comprimento do título
+                    $final_post_title = mb_substr( $final_post_title, 0, 197 ) . '...';
                 }
 
                 $post_data = array(
-                    'post_title'    => $post_title,
+                    'post_title'    => $final_post_title,
                     'post_content'  => wp_kses_post( $generated_content ),
                     'post_status'   => 'draft',
                     'post_author'   => get_current_user_id(),

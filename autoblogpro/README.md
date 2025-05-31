@@ -30,6 +30,7 @@ AutoBlogPro permite aos usuários definir nichos, associar categorias e gerar ar
     *   **Integração com API OpenAI:** Utiliza o modelo `gpt-3.5-turbo` (ou configurável futuramente) para gerar texto para os artigos.
     *   **Formulário de Geração Expandido:** Interface em "AutoBlogPro > Gerar Artigos" permite ao usuário especificar:
         *   Nicho de origem (para herdar categorias).
+        *   Número de artigos a gerar no lote.
         *   Palavras-chave alvo para o conteúdo.
         *   Tamanho Médio Estimado do artigo (em palavras).
         *   Tom de Voz (ex: Formal, Informal, Criativo).
@@ -37,19 +38,25 @@ AutoBlogPro permite aos usuários definir nichos, associar categorias e gerar ar
         *   Nível de Criatividade (controla o parâmetro `temperature` da API).
         *   Palavras-chave Negativas (termos a serem evitados pela IA).
         *   Idioma de geração do conteúdo.
+        *   Número de Seções Principais (H2) desejadas para estruturar o artigo.
     *   **Construção Dinâmica de Prompts:** Os parâmetros do formulário são usados para construir prompts detalhados (de sistema e de usuário) para a API OpenAI, visando um melhor controle sobre o resultado da geração.
+    *   **Geração de Múltiplos Artigos:** Suporte à geração de vários artigos em um único lote, com feedback individualizado para cada tentativa e diferenciação nos títulos dos posts gerados (ex: "Título (#1/3)").
     *   **Criação de Posts (Rascunhos):** O conteúdo gerado pela API é automaticamente salvo como um novo post do WordPress com status "rascunho".
     *   **Atribuição de Dados ao Post:**
-        *   O título do post é gerado com base nas palavras-chave fornecidas.
+        *   O título do post é gerado com base nas palavras-chave e, se em lote, inclui um contador.
         *   As categorias associadas ao nicho selecionado são automaticamente atribuídas ao novo post.
         *   O ID do nicho de origem é salvo como metadado (`_autobp_generated_from_niche_id`) no post gerado para rastreabilidade.
-    *   **Feedback ao Usuário Aprimorado:** Mensagens claras de sucesso (com link para editar o rascunho em nova aba) e de erro (incluindo detalhes de erros da API e códigos de erro) são exibidas após a tentativa de geração.
+    *   **Feedback ao Usuário Aprimorado:** Mensagens claras de sucesso (com link para editar o rascunho em nova aba) e de erro (incluindo detalhes de erros da API e códigos de erro) são exibidas após a tentativa de geração, individualmente para cada artigo em um lote.
+    *   **Biblioteca de Artigos:**
+        *   Subpágina "AutoBlogPro > Biblioteca de Artigos" que lista todos os artigos gerados pelo plugin.
+        *   Exibe colunas com Título do Artigo (com link de edição), Nicho de Origem, Data de Criação, Status e Ações.
+        *   Ação "Publicar" disponível diretamente na biblioteca para artigos com status "Rascunho", permitindo publicação rápida com redirecionamento e feedback.
+        *   Ações "Ver" e "Lixeira" também disponíveis.
 
 ## Próximos Passos
 
-*   Implementar a lógica para gerar múltiplos artigos com base no campo "Número de Artigos a Gerar".
 *   Permitir a seleção do modelo da OpenAI (GPT-3.5-turbo, GPT-4, etc.) na página de configurações.
-*   Opção para publicar diretamente ou agendar posts (além de salvar como rascunho).
+*   Opção para publicar diretamente ou agendar posts (além de salvar como rascunho) a partir da página de geração.
 *   Melhorias na geração de títulos (ex: solicitar à IA um título otimizado).
 *   Refinamento contínuo da engenharia de prompts com base nos resultados.
 *   Adicionar a capacidade de definir um "público-alvo" para os artigos.

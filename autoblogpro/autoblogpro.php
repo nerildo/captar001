@@ -73,9 +73,10 @@ if ( ! class_exists( 'AutoBlogPro' ) ) {
             $this->version = AUTOBP_VERSION;
             // Ações de inicialização aqui
             add_action( 'plugins_loaded', array( $this, 'load_plugin_textdomain' ) );
-                    add_action( 'init', array( $this, 'register_niche_cpt' ) );
-                    add_action( 'admin_init', array( $this, 'load_admin_dependencies' ) );
-                }
+            add_action( 'init', array( $this, 'register_niche_cpt' ) );
+            add_action( 'admin_init', array( $this, 'load_admin_dependencies' ) );
+            add_action( 'admin_post_autobp_publish_post', array( $this, 'handle_publish_post_action' ) );
+        }
 
                 /**
                  * Carrega dependências da área administrativa.
@@ -222,6 +223,69 @@ if ( ! class_exists( 'AutoBlogPro' ) ) {
                     // Código a ser executado na desativação
                     // flush_rewrite_rules(); // Opcional, mas pode ajudar a limpar
                 }
+
+        /**
+         * Manipula a ação de publicar um post ('autobp_publish_post') acionada a partir da Biblioteca de Artigos.
+         *
+         * Este método é registrado no hook `admin_post_{action}`. Ele executa as seguintes etapas:
+         * 1. Valida o `post_id` recebido via `$_GET`.
+         * 2. Verifica o nonce de segurança (`_wpnonce`) usando `check_admin_referer()`.
+         * 3. Verifica se o usuário atual tem a capacidade de 'publish_post' para o post especificado.
+         * 4. Se todas as verificações passarem, atualiza o status do post para 'publish' usando `wp_update_post()`.
+         * 5. Redireciona o usuário de volta para a página da Biblioteca de Artigos (`autobp-article-library`)
+         *    com parâmetros de query (`autobp_message` e `post_id`) para exibir uma mensagem de
+         *    sucesso ou falha na interface.
+         *
+         * Se qualquer verificação falhar (ID do post inválido, nonce inválido, falta de permissão),
+         * o script redireciona com uma mensagem de erro apropriada ou `wp_die()` é chamado por `check_admin_referer`.
+         *
+         * @since 0.1.0
+         * @access public
+         */
+        public function handle_publish_post_action() {
+            // 1. Valida o post_id.
+            $post_id = isset( $_GET['post_id'] ) ? intval( $_GET['post_id'] ) : 0;
+            $redirect_url = admin_url( 'admin.php?page=autobp-article-library' ); // URL base para redirecionamento.
+
+            if ( ! $post_id ) {
+                // Se o post_id for inválido ou não fornecido, redireciona com mensagem de erro.
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'invalid_post_id', 'post_id' => 0 ), $redirect_url );
+                wp_safe_redirect( $redirect_url );
+                exit;
+            }
+
+            // 2. Verifica o nonce de segurança.
+            // A função `check_admin_referer` interrompe a execução com `wp_die()` se o nonce falhar.
+            check_admin_referer( 'autobp_publish_post_' . $post_id );
+
+            // 3. Verifica a capacidade (permissão) do usuário.
+            if ( ! current_user_can( 'publish_post', $post_id ) ) {
+                // Se o usuário não tiver permissão, redireciona com mensagem de erro.
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'publish_permission_denied', 'post_id' => $post_id ), $redirect_url );
+                wp_safe_redirect( $redirect_url );
+                exit;
+                // Alternativamente, poderia usar wp_die para uma interrupção mais abrupta:
+                // wp_die( __( 'Você não tem permissão para publicar este post.', 'autoblogpro' ), __( 'Erro de Permissão', 'autoblogpro' ), array( 'response' => 403, 'back_link' => true ) );
+            }
+
+            // 4. Tenta publicar o post.
+            // `wp_update_post` é usado para alterar o status do post para 'publish'.
+            // O segundo parâmetro `true` faz com que a função retorne `WP_Error` em caso de falha.
+            $updated_post_result = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'publish' ), true );
+
+            // 5. Prepara o redirecionamento com base no resultado da publicação.
+            if ( is_wp_error( $updated_post_result ) ) {
+                // Se `wp_update_post` falhar. Isso é raro se o post existe e o usuário tem permissão,
+                // mas pode acontecer devido a hooks ou outros problemas.
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'publish_failed', 'post_id' => $post_id ), $redirect_url );
+            } else {
+                // Se a publicação for bem-sucedida.
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'post_published', 'post_id' => $post_id ), $redirect_url );
+            }
+
+            wp_safe_redirect( $redirect_url ); // Redireciona o usuário.
+            exit; // Garante que nenhum outro código seja executado após o redirecionamento.
+        }
     }
 
     // Registrar hooks de ativação e desativação
@@ -230,6 +294,7 @@ if ( ! class_exists( 'AutoBlogPro' ) ) {
 
     // Inicializar o plugin
     // A função get_instance() garante que o construtor seja chamado apenas uma vez.
+    // e dentro do construtor, o add_action para 'admin_post_autobp_publish_post' será configurado.
     AutoBlogPro::get_instance();
 }
 ?>
