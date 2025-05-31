@@ -49,9 +49,19 @@ AutoBlogPro permite aos usuários definir nichos, associar categorias e gerar ar
     *   **Feedback ao Usuário Aprimorado:** Mensagens claras de sucesso (com link para editar o rascunho em nova aba) e de erro (incluindo detalhes de erros da API e códigos de erro) são exibidas após a tentativa de geração, individualmente para cada artigo em um lote.
     *   **Biblioteca de Artigos:**
         *   Subpágina "AutoBlogPro > Biblioteca de Artigos" que lista todos os artigos gerados pelo plugin.
-        *   Exibe colunas com Título do Artigo (com link de edição), Nicho de Origem, Data de Criação, Status e Ações.
-        *   Ação "Publicar" disponível diretamente na biblioteca para artigos com status "Rascunho", permitindo publicação rápida com redirecionamento e feedback.
-        *   Ações "Ver" e "Lixeira" também disponíveis.
+        *   **Paginação:** Implementada para facilitar a navegação por um grande número de artigos.
+        *   **Filtros:** Adicionados filtros por Nicho de Origem e Status do Post.
+        *   **Detalhes Exibidos:** Colunas para Título do Artigo (com link de edição), Nicho de Origem, Data de Criação, Status e Ações.
+        *   **Ações Rápidas:**
+            *   "Publicar": Para rascunhos, com redirecionamento e feedback.
+            *   "Agendar": Para rascunhos, com interface para selecionar data/hora futura e feedback.
+            *   "Mover para Lixeira": Com confirmação JavaScript e feedback.
+            *   Links "Ver" e "Editar" padrão.
+    *   **Verificação de Plágio (Copyscape):**
+        *   Seção de Configuração para Nome de Usuário e Chave de API Copyscape.
+        *   Botão "Verificar Plágio" na Biblioteca de Artigos para cada post.
+        *   Verificação de plágio via AJAX, utilizando a API Copyscape.
+        *   Exibição dos resultados (contagem de cópias, link para relatório Copyscape se houver resultados, custo da verificação) e salvamento dos resultados como metadados do post.
 
 ## Próximos Passos
 

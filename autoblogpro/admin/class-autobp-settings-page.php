@@ -556,37 +556,123 @@ class AutoBP_Settings_Page {
         echo '<h1>' . esc_html__( 'Biblioteca de Artigos Gerados', 'autoblogpro' ) . '</h1>';
 
         // Exibe mensagens de feedback (ex: após publicar um post via admin-post.php).
-        // As mensagens são passadas via parâmetros de URL.
         if ( isset( $_GET['autobp_message'] ) && isset( $_GET['post_id'] ) ) {
-            $message_type = sanitize_key( $_GET['autobp_message'] ); // Tipo de mensagem (ex: 'post_published').
-            $post_id_feedback = intval( $_GET['post_id'] ); // ID do post relacionado à mensagem.
-            $post_title_feedback = $post_id_feedback ? get_the_title( $post_id_feedback ) : ''; // Título para a mensagem.
+            $message_type = sanitize_key( $_GET['autobp_message'] );
+            $post_id_feedback = intval( $_GET['post_id'] );
+            $post_title_feedback = $post_id_feedback ? get_the_title( $post_id_feedback ) : '';
 
             if ( $message_type === 'post_published' && $post_title_feedback ) {
                 echo '<div class="notice notice-success is-dismissible"><p>' . sprintf( esc_html__( 'Post "%s" publicado com sucesso!', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
             } elseif ( $message_type === 'publish_failed' && $post_title_feedback ) {
                  echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Falha ao publicar o post "%s".', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
-            } elseif ( $message_type === 'publish_permission_denied' ) {
-                 echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Você não tem permissão para publicar o post selecionado.', 'autoblogpro' ) . '</p></div>';
+            } elseif ( $message_type === 'publish_permission_denied' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Você não tem permissão para publicar o post "%s".', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
             } elseif ( $message_type === 'invalid_post_id' ) {
-                 echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'ID do post inválido para a ação de publicação.', 'autoblogpro' ) . '</p></div>';
+                 echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'ID do post inválido para a ação solicitada.', 'autoblogpro' ) . '</p></div>';
+            } elseif ( $message_type === 'post_trashed' && $post_title_feedback ) {
+                echo '<div class="notice notice-success is-dismissible"><p>' . sprintf( esc_html__( 'Post "%s" movido para a lixeira com sucesso.', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
+            } elseif ( $message_type === 'trash_failed' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Falha ao mover o post "%s" para a lixeira.', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
+            } elseif ( $message_type === 'trash_permission_denied' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Você não tem permissão para mover o post "%s" para a lixeira.', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
+            } elseif ( $message_type === 'post_scheduled' && $post_title_feedback ) {
+                $scheduled_date = isset($_GET['scheduled_date']) ? sanitize_text_field(wp_unslash($_GET['scheduled_date'])) : '';
+                echo '<div class="notice notice-success is-dismissible"><p>' . sprintf( esc_html__( 'Post "%1$s" agendado para %2$s com sucesso.', 'autoblogpro' ), esc_html( $post_title_feedback ), esc_html($scheduled_date) ) . '</p></div>';
+            } elseif ( $message_type === 'schedule_failed' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Falha ao agendar o post "%s".', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
+            } elseif ( $message_type === 'schedule_permission_denied' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Você não tem permissão para agendar o post "%s".', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
+            } elseif ( $message_type === 'schedule_invalid_date' && $post_title_feedback ) {
+                 echo '<div class="notice notice-error is-dismissible"><p>' . sprintf( esc_html__( 'Data ou hora inválida para o agendamento do post "%s". A data deve ser no futuro.', 'autoblogpro' ), esc_html( $post_title_feedback ) ) . '</p></div>';
             }
         }
 
-        // Argumentos para WP_Query para buscar os posts gerados pelo plugin.
+        // Coletar valores dos filtros
+        $selected_niche_id = isset( $_GET['filter_niche_id'] ) ? intval( $_GET['filter_niche_id'] ) : '';
+        $selected_post_status = isset( $_GET['filter_post_status'] ) ? sanitize_key( $_GET['filter_post_status'] ) : '';
+
+        // Formulários de Filtro
+        ?>
+        <form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>">
+            <input type="hidden" name="page" value="autobp-article-library" />
+            <div class="alignleft actions">
+                <?php
+                // Filtro de Nicho
+                $niche_cpt_posts = get_posts( array( 'post_type' => 'niche', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+                if ( ! empty( $niche_cpt_posts ) ) {
+                    echo '<select name="filter_niche_id">';
+                    echo '<option value="">' . esc_html__( 'Todos os Nichos', 'autoblogpro' ) . '</option>';
+                    foreach ( $niche_cpt_posts as $niche_post_item ) {
+                        echo '<option value="' . esc_attr( $niche_post_item->ID ) . '"' . selected( $selected_niche_id, $niche_post_item->ID, false ) . '>' . esc_html( $niche_post_item->post_title ) . '</option>';
+                    }
+                    echo '</select>';
+                }
+
+                // Filtro de Status
+                // Usar get_post_stati para obter status de forma mais dinâmica e com rótulos corretos
+                $stati = get_post_stati( array('show_in_admin_status_list' => true ), 'objects' );
+                if ( !empty($stati) ) {
+                    echo '<select name="filter_post_status">';
+                    echo '<option value="">' . esc_html__( 'Todos os Status', 'autoblogpro' ) . '</option>';
+                    // Adicionar 'draft' manualmente se não estiver em show_in_admin_status_list por padrão (geralmente está)
+                    // Ou podemos ter uma lista fixa de status que nos interessam
+                    $display_stati = array('publish', 'draft', 'pending', 'future', 'private'); // Status que queremos permitir filtrar
+                    foreach ( $display_stati as $status_slug ) {
+                        $status_object = get_post_status_object( $status_slug );
+                        if ($status_object) {
+                             echo '<option value="' . esc_attr( $status_slug ) . '"' . selected( $selected_post_status, $status_slug, false ) . '>' . esc_html( $status_object->label ) . '</option>';
+                        }
+                    }
+                    echo '</select>';
+                }
+                ?>
+                <input type="submit" class="button" value="<?php esc_attr_e( 'Filtrar', 'autoblogpro' ); ?>">
+                <a href="<?php echo esc_url( admin_url( 'admin.php?page=autobp-article-library' ) ); ?>" class="button"><?php esc_html_e( 'Limpar Filtros', 'autoblogpro' ); ?></a>
+            </div>
+        </form>
+        <br class="clear">
+        <?php
+
+        // Configurações de paginação
+        $posts_per_page = 20;
+        $current_page = isset( $_GET['paged'] ) ? intval( $_GET['paged'] ) : 1;
+        $current_page = max( 1, $current_page );
+
+        // Modificar Argumentos da WP_Query com base nos filtros
         $args = array(
             'post_type'      => 'post',
-            'post_status'    => array('publish', 'draft', 'pending', 'future', 'private'),
-            'meta_key'       => '_autobp_generated_from_niche_id',
-            'posts_per_page' => -1, // Mostrar todos por enquanto
+            'posts_per_page' => $posts_per_page,
+            'paged'          => $current_page,
             'orderby'        => 'date',
             'order'          => 'DESC',
+            'meta_query'     => array(
+                'relation' => 'AND',
+                array(
+                    'key'     => '_autobp_generated_from_niche_id',
+                    'compare' => 'EXISTS',
+                ),
+            ),
         );
 
-        $generated_posts_query = new WP_Query( $args );
+        if ( $selected_niche_id > 0 ) {
+            $args['meta_query'][] = array(
+                'key'     => '_autobp_generated_from_niche_id',
+                'value'   => $selected_niche_id,
+                'compare' => '=',
+                'type'    => 'NUMERIC',
+            );
+        }
 
-        if ( ! $generated_posts_query->have_posts() ) {
-            echo '<p>' . esc_html__( 'Nenhum artigo gerado encontrado.', 'autoblogpro' ) . '</p>';
+        if ( ! empty( $selected_post_status ) ) {
+            $args['post_status'] = $selected_post_status;
+        } else {
+            $args['post_status'] = array('publish', 'draft', 'pending', 'future', 'private');
+        }
+
+        $article_query = new WP_Query( $args );
+
+        if ( ! $article_query->have_posts() ) {
+            echo '<p>' . esc_html__( 'Nenhum artigo gerado encontrado com os filtros atuais.', 'autoblogpro' ) . '</p>';
         } else {
             echo '<table class="wp-list-table widefat fixed striped posts">';
             echo '<thead><tr>';
@@ -598,11 +684,12 @@ class AutoBP_Settings_Page {
             echo '</tr></thead>';
             echo '<tbody id="the-list">';
 
-            while ( $generated_posts_query->have_posts() ) {
-                $generated_posts_query->the_post(); // Configura dados globais do post para funções como get_the_title() etc.
+            // Loop através dos posts encontrados
+            while ( $article_query->have_posts() ) {
+                $article_query->the_post();
 
                 $post_id = get_the_ID();
-                $title = get_the_title();
+                $title = get_the_title(); // Não precisa de $post_id aqui pois the_post() já configurou
                 $status_object = get_post_status_object( get_post_status( $post_id ) );
                 $status_label = $status_object ? $status_object->label : get_post_status( $post_id );
                 $date = get_the_date( '', $post_id ); // Usa o formato de data padrão do WordPress
@@ -631,8 +718,10 @@ class AutoBP_Settings_Page {
                      echo ' | <span class="view"><a href="' . esc_url( get_permalink( $post_id ) ) . '" target="_blank">' . esc_html__( 'Ver', 'autoblogpro' ) . '</a></span>';
                 }
                  // Adicionar link de Lixeira (Trash)
-                if ( current_user_can( 'delete_post', $post_id ) ) {
-                    echo ' | <span class="trash"><a href="' . esc_url( get_delete_post_link( $post_id ) ) . '" class="submitdelete" aria-label="' . esc_attr__( 'Mover para a lixeira', 'autoblogpro') . '">' . esc_html__( 'Lixeira', 'autoblogpro' ) . '</a></span>';
+                if ( current_user_can( 'delete_post', $post_id ) && get_post_status( $post_id ) !== 'trash' ) {
+                    $trash_nonce = wp_create_nonce( 'autobp_trash_post_' . $post_id );
+                    $trash_link = admin_url( 'admin-post.php?action=autobp_trash_post&post_id=' . $post_id . '&_wpnonce=' . $trash_nonce );
+                    echo ' | <span class="trash"><a href="' . esc_url( $trash_link ) . '" style="color: red;" onclick="return confirm(\'' . esc_js( __( 'Tem certeza que deseja mover este item para a lixeira?', 'autoblogpro' ) ) . '\');" aria-label="' . esc_attr__('Mover este item para a lixeira', 'autoblogpro') . '">' . esc_html__( 'Lixeira', 'autoblogpro' ) . '</a></span>';
                 }
                 // Adicionar link de Publicar se for rascunho
                 if ( get_post_status( $post_id ) === 'draft' && current_user_can( 'publish_post', $post_id ) ) {
@@ -655,17 +744,180 @@ class AutoBP_Settings_Page {
                      echo '<a href="' . esc_url( get_permalink( $post_id ) ) . '" target="_blank" class="button button-small">' . esc_html__( 'Ver', 'autoblogpro' ) . '</a> ';
                 }
                  if ( get_post_status( $post_id ) === 'draft' && current_user_can( 'publish_post', $post_id ) ) {
-                    $publish_nonce_col = wp_create_nonce( 'autobp_publish_post_' . $post_id ); // Novo nonce para evitar conflito se o mesmo post listado várias vezes (improvável aqui)
+                    $publish_nonce_col = wp_create_nonce( 'autobp_publish_post_' . $post_id );
                     $publish_link_col = admin_url( 'admin-post.php?action=autobp_publish_post&post_id=' . $post_id . '&_wpnonce=' . $publish_nonce_col );
-                    echo '<a href="' . esc_url( $publish_link_col ) . '" class="button button-small button-primary" style="color: white; background-color: green; border-color: darkgreen;">' . esc_html__( 'Publicar', 'autoblogpro' ) . '</a>';
+                    echo '<a href="' . esc_url( $publish_link_col ) . '" class="button button-small button-primary autobp-action-button">' . esc_html__( 'Publicar', 'autoblogpro' ) . '</a> ';
                 }
+                if ( get_post_status( $post_id ) === 'draft' && current_user_can( 'edit_post', $post_id ) && current_user_can( 'publish_posts') ) {
+                     echo '<a href="#" class="button button-small autobp-schedule-action autobp-action-button" data-postid="' . esc_attr( $post_id ) . '">' . esc_html__( 'Agendar', 'autoblogpro' ) . '</a> ';
+                }
+                // Botão Verificar Plágio
+                $copyscape_username = get_option('autobp_copyscape_username', '');
+                $copyscape_api_key = get_option('autobp_copyscape_api_key', '');
+                $copyscape_configured = !empty($copyscape_username) && !empty($copyscape_api_key);
+
+                echo '<button type="button" class="button autobp-check-plagiarism autobp-action-button" data-postid="' . esc_attr( $post_id ) . '" ';
+                if (!$copyscape_configured) {
+                    echo 'disabled="disabled" title="' . esc_attr__('Configure as credenciais da API Copyscape nas Configurações do AutoBlogPro.', 'autoblogpro') . '"';
+                }
+                echo '>' . esc_html__( 'Verificar Plágio', 'autoblogpro' ) . '</button>';
+
+                if ( get_post_status( $post_id ) !== 'trash' && current_user_can( 'delete_post', $post_id ) ) {
+                    $trash_nonce_col = wp_create_nonce( 'autobp_trash_post_' . $post_id );
+                    $trash_link_col = admin_url( 'admin-post.php?action=autobp_trash_post&post_id=' . $post_id . '&_wpnonce=' . $trash_nonce_col );
+                    echo '<a href="' . esc_url( $trash_link_col ) . '" class="button button-small autobp-action-button autobp-trash-button" onclick="return confirm(\'' . esc_js( __( 'Tem certeza que deseja mover este item para a lixeira?', 'autoblogpro' ) ) . '\');">' . esc_html__( 'Lixeira', 'autoblogpro' ) . '</a>';
+                }
+                echo '<br><span class="spinner" id="autobp-plagiarism-spinner-' . esc_attr( $post_id ) . '" style="display:none; float:none; vertical-align: middle; margin-top: 5px;"></span>';
+                echo '<span class="autobp-plagiarism-result" id="autobp-plagiarism-result-' . esc_attr( $post_id ) . '" style="display:none; margin-left:0; margin-top: 5px; display:inline-block;"></span>';
                 echo '</td>';
                 echo '</tr>';
+                // Linha oculta para o formulário de agendamento
+                ?>
+                <tr id="autobp-schedule-form-<?php echo esc_attr( $post_id ); ?>" class="autobp-schedule-form-row" style="display:none;">
+                    <td colspan="5">
+                        <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="autobp-schedule-form-inner">
+                            <input type="hidden" name="action" value="autobp_schedule_post">
+                            <input type="hidden" name="post_id" value="<?php echo esc_attr( $post_id ); ?>">
+                            <?php wp_nonce_field( 'autobp_schedule_post_' . $post_id, '_wpnonce_autobp_schedule' ); ?>
+
+                            <label for="autobp_schedule_date_<?php echo esc_attr( $post_id ); ?>"><?php esc_html_e( 'Data:', 'autoblogpro' ); ?></label>
+                            <input type="date" id="autobp_schedule_date_<?php echo esc_attr( $post_id ); ?>" name="autobp_schedule_date" required>
+
+                            <label for="autobp_schedule_time_<?php echo esc_attr( $post_id ); ?>"><?php esc_html_e( 'Hora:', 'autoblogpro' ); ?></label>
+                            <input type="time" id="autobp_schedule_time_<?php echo esc_attr( $post_id ); ?>" name="autobp_schedule_time" required>
+
+                            <input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Salvar Agendamento', 'autoblogpro' ); ?>">
+                            <button type="button" class="button autobp-cancel-schedule" data-postid="<?php echo esc_attr( $post_id ); ?>"><?php esc_html_e( 'Cancelar', 'autoblogpro' ); ?></button>
+                        </form>
+                    </td>
+                </tr>
+                <?php
             }
-            wp_reset_postdata(); // Restaura dados globais do post
+            wp_reset_postdata();
             echo '</tbody></table>';
+
+            // Adicionar links de paginação
+            if ( $article_query->max_num_pages > 1 ) {
+                echo '<div class="tablenav"><div class="tablenav-pages">';
+                echo paginate_links( array(
+                    // Construir URL base para paginação mantendo os filtros ativos.
+                    $base_url_for_pagination = admin_url( 'admin.php?page=autobp-article-library' );
+                    if ( ! empty( $selected_niche_id ) ) {
+                        $base_url_for_pagination = add_query_arg( 'filter_niche_id', $selected_niche_id, $base_url_for_pagination );
+                    }
+                    if ( ! empty( $selected_post_status ) ) {
+                        $base_url_for_pagination = add_query_arg( 'filter_post_status', $selected_post_status, $base_url_for_pagination );
+                    }
+
+                    'base'         => add_query_arg( 'paged', '%#%', $base_url_for_pagination ),
+                    'format'       => '',
+                    'total'        => $article_query->max_num_pages,
+                    'current'      => $current_page,
+                    'show_all'     => false,
+                    'end_size'     => 1,
+                    'mid_size'     => 2,
+                    'prev_next'    => true,
+                    'prev_text'    => __('&laquo; Anterior', 'autoblogpro'),
+                    'next_text'    => __('Próximo &raquo;', 'autoblogpro'),
+                    'type'         => 'plain',
+                ) );
+                echo '</div></div>';
+            }
         }
         echo '</div>'; // Fim do .wrap
+        ?>
+        <style type="text/css">
+            .autobp-schedule-form-row td { padding: 10px; background-color: #f9f9f9; }
+            .autobp-schedule-form-inner label { margin-right: 5px; }
+            .autobp-schedule-form-inner input[type="date"],
+            .autobp-schedule-form-inner input[type="time"] { margin-right: 15px; }
+            .autobp-action-button { margin-bottom: 5px !important; } /* Adiciona margem inferior aos botões de ação */
+            .autobp-trash-button { color: red !important; border-color: red !important; }
+            .autobp-trash-button:hover { color: #fff !important; background-color: red !important; }
+
+        </style>
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            // Handler para Agendamento (existente)
+            $('.autobp-schedule-action').on('click', function(e) {
+                e.preventDefault();
+                var postId = $(this).data('postid');
+                $('.autobp-schedule-form-row').not('#autobp-schedule-form-' + postId).hide();
+                $('tr.autobp-schedule-form-row').closest('tbody').find('tr').removeClass('autobp-selected-for-schedule');
+                var targetFormRow = $('#autobp-schedule-form-' + postId);
+                targetFormRow.toggle();
+                if(targetFormRow.is(':visible')){
+                    $(this).closest('tr').addClass('autobp-selected-for-schedule');
+                    var now = new Date();
+                    var month = (now.getMonth() + 1).toString().padStart(2, '0');
+                    var day = now.getDate().toString().padStart(2, '0');
+                    var year = now.getFullYear();
+                    var hours = now.getHours().toString().padStart(2, '0');
+                    var minutes = now.getMinutes().toString().padStart(2, '0');
+                    targetFormRow.find('input[name="autobp_schedule_date"]').val(year + '-' + month + '-' + day);
+                    targetFormRow.find('input[name="autobp_schedule_time"]').val(hours + ':' + minutes);
+                } else {
+                     $(this).closest('tr').removeClass('autobp-selected-for-schedule');
+                }
+            });
+            $('.autobp-cancel-schedule').on('click', function(e) {
+                e.preventDefault();
+                var postId = $(this).data('postid');
+                $('#autobp-schedule-form-' + postId).hide();
+                $('#autobp-schedule-form-' + postId).closest('tbody').find('tr').removeClass('autobp-selected-for-schedule');
+            });
+
+            // Handler para Verificação de Plágio (novo)
+            $('.autobp-check-plagiarism').on('click', function() {
+                var postId = $(this).data('postid');
+                var $button = $(this);
+                var $resultSpan = $('#autobp-plagiarism-result-' + postId);
+                var $spinner = $('#autobp-plagiarism-spinner-' + postId);
+
+                $resultSpan.hide().html('');
+                $spinner.addClass('is-active').css('display', 'inline-block'); // Usar display inline-block para o spinner
+                $button.prop('disabled', true);
+
+                $.ajax({
+                    url: ajaxurl, // Variável global do WordPress
+                    type: 'POST',
+                    data: {
+                        action: 'autobp_check_plagiarism', // Nossa action AJAX
+                        post_id: postId,
+                        _ajax_nonce: '<?php echo wp_create_nonce('autobp_check_plagiarism_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var data = response.data;
+                            var resultText = data.message;
+                            var textColor = 'green'; // Cor padrão para sucesso sem cópias
+
+                            if (data.count > 0) {
+                                textColor = 'orange'; // Cor para quando cópias são encontradas
+                                if (data.results_url) {
+                                   resultText += ' <a href="' + data.results_url + '" target="_blank"><?php echo esc_js(__('Ver Relatório Completo', 'autoblogpro')); ?></a>';
+                                }
+                            }
+                             if (data.cost_message) {
+                                resultText += ' (' + data.cost_message + ')';
+                            }
+                            $resultSpan.html('<span style="color:' + textColor + ';">' + resultText + '</span>').show();
+                        } else {
+                            $resultSpan.html('<span style="color:red;">Erro: ' + response.data.message + '</span>').show();
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        $resultSpan.html('<span style="color:red;">Erro AJAX: ' + textStatus + ' - ' + errorThrown + '</span>').show();
+                    },
+                    complete: function() {
+                        $spinner.removeClass('is-active').hide();
+                        $button.prop('disabled', false);
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
     }
 }
 

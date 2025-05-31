@@ -76,6 +76,9 @@ if ( ! class_exists( 'AutoBlogPro' ) ) {
             add_action( 'init', array( $this, 'register_niche_cpt' ) );
             add_action( 'admin_init', array( $this, 'load_admin_dependencies' ) );
             add_action( 'admin_post_autobp_publish_post', array( $this, 'handle_publish_post_action' ) );
+            add_action( 'admin_post_autobp_trash_post', array( $this, 'handle_trash_post_action' ) );
+            add_action( 'admin_post_autobp_schedule_post', array( $this, 'handle_schedule_post_action' ) );
+            add_action( 'wp_ajax_autobp_check_plagiarism', array( $this, 'handle_ajax_check_plagiarism' ) );
         }
 
                 /**
@@ -285,6 +288,210 @@ if ( ! class_exists( 'AutoBlogPro' ) ) {
 
             wp_safe_redirect( $redirect_url ); // Redireciona o usuário.
             exit; // Garante que nenhum outro código seja executado após o redirecionamento.
+        }
+
+        /**
+         * Manipula a ação de mover um post para a lixeira (`autobp_trash_post`) a partir da Biblioteca de Artigos.
+         *
+         * Este método é registrado no hook `admin_post_{action}`.
+         * 1. Valida o `post_id` de `$_GET`.
+         * 2. Verifica o nonce de segurança.
+         * 3. Verifica se o usuário atual tem a capacidade de 'delete_post'.
+         * 4. Se as verificações passarem, move o post para a lixeira usando `wp_trash_post()`.
+         * 5. Redireciona para a Biblioteca de Artigos com feedback (`autobp_message` e `post_id`).
+         *
+         * @since 0.1.0
+         * @access public
+         */
+        public function handle_trash_post_action() {
+            $post_id = isset( $_GET['post_id'] ) ? intval( $_GET['post_id'] ) : 0;
+            $redirect_url = admin_url( 'admin.php?page=autobp-article-library&post_id=' . $post_id );
+
+
+            if ( ! $post_id ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'invalid_post_id'), admin_url( 'admin.php?page=autobp-article-library&post_id=0' ) );
+                wp_safe_redirect( $redirect_url );
+                exit;
+            }
+
+            check_admin_referer( 'autobp_trash_post_' . $post_id );
+
+            if ( ! current_user_can( 'delete_post', $post_id ) ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'trash_permission_denied' ), $redirect_url );
+                wp_safe_redirect( $redirect_url );
+                exit;
+            }
+
+            $result = wp_trash_post( $post_id );
+
+            if ( false === $result ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'trash_failed' ), $redirect_url );
+            } else {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'post_trashed' ), $redirect_url );
+            }
+            wp_safe_redirect( $redirect_url );
+            exit;
+        }
+
+        /**
+         * Manipula a ação de agendar um post (`autobp_schedule_post`) a partir da Biblioteca de Artigos.
+         *
+         * Este método é registrado no hook `admin_post_{action}`.
+         * 1. Valida o `post_id` de `$_POST`.
+         * 2. Verifica o nonce de segurança (`_wpnonce_autobp_schedule`).
+         * 3. Verifica se o usuário atual tem as capacidades 'edit_post' e 'publish_posts'.
+         * 4. Recupera e valida a data e hora do agendamento de `$_POST`.
+         * 5. Converte a data/hora local para GMT e verifica se está no futuro.
+         * 6. Se válido, atualiza o post com `post_status`='future' e as datas de agendamento usando `wp_update_post()`.
+         * 7. Redireciona para a Biblioteca de Artigos com feedback.
+         *
+         * @since 0.1.0
+         * @access public
+         */
+        public function handle_schedule_post_action() {
+            $post_id = isset( $_POST['post_id'] ) ? intval( $_POST['post_id'] ) : 0;
+            $redirect_url = admin_url( 'admin.php?page=autobp-article-library&post_id=' . $post_id );
+
+            if ( ! $post_id ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'invalid_post_id'), admin_url( 'admin.php?page=autobp-article-library&post_id=0' ) );
+                wp_safe_redirect( $redirect_url );
+                exit;
+            }
+
+            check_admin_referer( 'autobp_schedule_post_' . $post_id, '_wpnonce_autobp_schedule' );
+
+            if ( ! current_user_can( 'edit_post', $post_id ) || ! current_user_can( 'publish_posts' ) ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'schedule_permission_denied' ), $redirect_url );
+                wp_safe_redirect( $redirect_url );
+                exit;
+            }
+
+            $schedule_date_str = isset( $_POST['autobp_schedule_date'] ) ? sanitize_text_field( $_POST['autobp_schedule_date'] ) : '';
+            $schedule_time_str = isset( $_POST['autobp_schedule_time'] ) ? sanitize_text_field( $_POST['autobp_schedule_time'] ) : '';
+            $datetime_string = $schedule_date_str . ' ' . $schedule_time_str;
+
+            $local_datetime = new DateTime( $datetime_string, wp_timezone() );
+            $timestamp_gmt = $local_datetime->getTimestamp();
+            $post_date_gmt = gmdate( 'Y-m-d H:i:s', $timestamp_gmt );
+            $post_date_local = get_date_from_gmt( $post_date_gmt );
+
+            if ( false === $timestamp_gmt || $timestamp_gmt < current_time( 'timestamp', true ) ) {
+                 $redirect_url = add_query_arg( array( 'autobp_message' => 'schedule_invalid_date' ), $redirect_url );
+                 wp_safe_redirect( $redirect_url );
+                 exit;
+            }
+
+            $post_data = array(
+                'ID'            => $post_id,
+                'post_status'   => 'future',
+                'post_date'     => $post_date_local,
+                'post_date_gmt' => $post_date_gmt,
+                'edit_date'     => true,
+            );
+
+            $result = wp_update_post( $post_data, true );
+
+            if ( is_wp_error( $result ) ) {
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'schedule_failed' ), $redirect_url );
+            } else {
+                $formatted_schedule_date = date_i18n( get_option('date_format') . ' @ ' . get_option('time_format'), strtotime($post_date_local) );
+                $redirect_url = add_query_arg( array( 'autobp_message' => 'post_scheduled', 'scheduled_date' => urlencode($formatted_schedule_date) ), $redirect_url );
+            }
+            wp_safe_redirect( $redirect_url );
+            exit;
+        }
+
+        /**
+         * Manipula a requisição AJAX para verificar plágio de um post (`autobp_check_plagiarism`)
+         * usando a API Copyscape.
+         *
+         * Este método é registrado no hook `wp_ajax_{action}`.
+         * 1. Verifica o nonce AJAX.
+         * 2. Valida o `post_id` de `$_POST`.
+         * 3. Verifica se o usuário atual tem a capacidade 'edit_post'.
+         * 4. Obtém o conteúdo do post, limpa tags HTML e normaliza espaços.
+         * 5. Recupera as credenciais da API Copyscape das opções do WordPress.
+         * 6. Instancia `AutoBP_Copyscape_Checker`, define o texto e chama o método `check()`.
+         * 7. Envia uma resposta JSON (`wp_send_json_success` ou `wp_send_json_error`)
+         *    contendo o resultado da verificação (contagem de cópias, link para relatório, custo)
+         *    ou uma mensagem de erro.
+         * 8. Salva o resultado da verificação e a data como metadados do post.
+         *
+         * @since 0.1.0
+         */
+        public function handle_ajax_check_plagiarism() {
+            // Verificar nonce de segurança
+            check_ajax_referer( 'autobp_check_plagiarism_nonce', '_ajax_nonce' );
+
+            // Obter e validar Post ID
+            if ( ! isset( $_POST['post_id'] ) || ! is_numeric( $_POST['post_id'] ) ) {
+                wp_send_json_error( array( 'message' => __( 'ID do post inválido.', 'autoblogpro' ) ) );
+            }
+            $post_id = intval( $_POST['post_id'] );
+
+            // Verificar permissões do usuário
+            if ( ! current_user_can( 'edit_post', $post_id ) ) {
+                wp_send_json_error( array( 'message' => __( 'Você não tem permissão para verificar este post.', 'autoblogpro' ) ) );
+            }
+
+            // Obter conteúdo do post
+            $post_to_check = get_post( $post_id );
+            if ( ! $post_to_check ) {
+                wp_send_json_error( array( 'message' => __( 'Post não encontrado.', 'autoblogpro' ) ) );
+            }
+
+            $content_to_check = wp_strip_all_tags( $post_to_check->post_content );
+            $content_to_check = trim( preg_replace( '/\s+/', ' ', $content_to_check ) );
+
+            if ( empty( $content_to_check ) ) {
+                wp_send_json_error( array( 'message' => __( 'O conteúdo do post está vazio. Não há nada para verificar.', 'autoblogpro' ) ) );
+            }
+
+            // Obter credenciais Copyscape
+            $username = get_option( 'autobp_copyscape_username' );
+            $api_key = get_option( 'autobp_copyscape_api_key' );
+
+            if ( empty( $username ) || empty( $api_key ) ) {
+                wp_send_json_error( array( 'message' => __( 'Credenciais da API Copyscape não configuradas nas Configurações do AutoBlogPro.', 'autoblogpro' ) ) );
+            }
+
+            // Incluir e usar a classe Copyscape_Checker
+            if ( ! class_exists( 'AutoBP_Copyscape_Checker' ) ) {
+                require_once AUTOBP_PLUGIN_DIR . 'includes/class-autobp-copyscape-checker.php';
+            }
+
+            $checker = new AutoBP_Copyscape_Checker( $username, $api_key );
+            $checker->set_text( $content_to_check );
+            $result = $checker->check();
+
+            if ( is_wp_error( $result ) ) {
+                wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+            } else {
+                // Sucesso na chamada à API Copyscape
+                $cost_message = sprintf(
+                    esc_html__( 'Custo: %s créditos.', 'autoblogpro' ),
+                    number_format_i18n( $result['cost'], 2 )
+                );
+
+                $data_to_send = array(
+                    'count'        => $result['count'],
+                    'message'      => '',
+                    'results_url'  => isset($result['allresultsurl']) ? esc_url($result['allresultsurl']) : (isset($result['results'][0]['viewurl']) ? esc_url($result['results'][0]['viewurl']) : ''),
+                    'cost_message' => $cost_message
+                );
+
+                if ( $result['count'] > 0 ) {
+                    // translators: %d: Número de resultados encontrados.
+                    $data_to_send['message'] = sprintf( _n( '%d resultado de plágio encontrado.', '%d resultados de plágio encontrados.', $result['count'], 'autoblogpro' ), $result['count'] );
+                } else {
+                    $data_to_send['message'] = __( 'Nenhuma cópia significativa encontrada.', 'autoblogpro' );
+                }
+
+                update_post_meta( $post_id, '_autobp_copyscape_last_check_result', $result );
+                update_post_meta( $post_id, '_autobp_copyscape_last_check_date', current_time('mysql') );
+
+                wp_send_json_success( $data_to_send );
+            }
         }
     }
 
