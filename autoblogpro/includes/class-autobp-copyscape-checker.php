@@ -105,21 +105,35 @@ if ( ! class_exists( 'AutoBP_Copyscape_Checker' ) ) {
          *                        erro de comunicação, ou erro retornado pela API Copyscape.
          */
         public function check() {
+            $text_hash_for_log = !empty($this->text_to_check) ? md5($this->text_to_check) : 'empty_text';
+            AutoBP_Log_Manager::info( 
+                'Iniciando verificação Copyscape.', 
+                array( 
+                    'username' => $this->username, 
+                    'text_length' => strlen($this->text_to_check),
+                    'text_hash' => $text_hash_for_log 
+                ) 
+            );
+
             // Validação das credenciais e do texto a ser verificado.
             if ( empty( $this->username ) || empty( $this->api_key ) ) {
+                AutoBP_Log_Manager::error( 'Verificação Copyscape falhou: Credenciais ausentes.', array('username_set' => !empty($this->username), 'apikey_set' => !empty($this->api_key)) );
                 return new WP_Error( 'copyscape_credentials_missing', __( 'Nome de usuário ou chave da API Copyscape não configurados.', 'autoblogpro' ) );
             }
 
             if ( empty( $this->text_to_check ) ) {
+                AutoBP_Log_Manager::warning( 'Verificação Copyscape: Nenhum texto fornecido.', array('username' => $this->username) );
                 return new WP_Error( 'copyscape_text_missing', __( 'Nenhum texto fornecido para verificação de plágio.', 'autoblogpro' ) );
             }
 
             // Validações de tamanho do texto (baseadas em requisitos comuns da API Copyscape).
-            // A documentação oficial da API deve ser consultada para os limites exatos.
-            if ( strlen( $this->text_to_check ) < 100 ) {
+            $text_length = strlen( $this->text_to_check );
+            if ( $text_length < 100 ) { 
+                AutoBP_Log_Manager::warning( 'Verificação Copyscape: Texto muito curto.', array('username' => $this->username, 'text_length' => $text_length) );
                 return new WP_Error( 'copyscape_text_too_short', __( 'O texto é muito curto para uma verificação significativa (geralmente são necessárias pelo menos 20 palavras ou ~100 caracteres).', 'autoblogpro' ) );
             }
-            if ( strlen( $this->text_to_check ) > 80000 ) {
+            if ( $text_length > 80000 ) { 
+                AutoBP_Log_Manager::warning( 'Verificação Copyscape: Texto muito longo.', array('username' => $this->username, 'text_length' => $text_length) );
                 return new WP_Error( 'copyscape_text_too_long', __( 'O texto é muito longo para uma única verificação na API Copyscape (limite prático de ~80.000 caracteres). Considere dividir o texto.', 'autoblogpro' ) );
             }
 
@@ -127,19 +141,19 @@ if ( ! class_exists( 'AutoBP_Copyscape_Checker' ) ) {
             $api_params = array(
                 'u' => $this->username,
                 'k' => $this->api_key,
-                'o' => 'csearch',
-                'f' => 'json',
-                'e' => 'UTF-8',
+                'o' => 'csearch', 
+                'f' => 'json',    
+                'e' => 'UTF-8',   
             );
-
-            $request_url = $this->api_url;
-
+            
+            $request_url = $this->api_url; 
+            
             $post_body = $api_params;
             $post_body['t'] = $this->text_to_check; // Texto é adicionado ao corpo do POST.
 
             // Argumentos para wp_remote_post.
             $args = array(
-                'body'    => $post_body,
+                'body'    => $post_body, 
                 'timeout' => 90,        // Timeout estendido para a chamada da API.
                 'headers' => array(),   // Copyscape usa parâmetros no corpo para auth, não headers Bearer.
                                         // 'Content-Type' é definido como 'application/x-www-form-urlencoded' por padrão por wp_remote_post para body array.
@@ -150,8 +164,7 @@ if ( ! class_exists( 'AutoBP_Copyscape_Checker' ) ) {
 
             // Processamento da resposta.
             if ( is_wp_error( $response ) ) {
-                // Erro na comunicação HTTP (ex: cURL error).
-                // translators: %s: Mensagem de erro do WordPress.
+                AutoBP_Log_Manager::error( 'Falha na chamada wp_remote_post para API Copyscape: ' . $response->get_error_message(), array( 'username' => $this->username, 'error_code' => $response->get_error_code(), 'text_hash' => $text_hash_for_log ) );
                 return new WP_Error( 'copyscape_wp_remote_post_failed', sprintf( __( 'Falha na comunicação com a API Copyscape: %s', 'autoblogpro' ), $response->get_error_message() ) );
             }
 
@@ -159,47 +172,44 @@ if ( ! class_exists( 'AutoBP_Copyscape_Checker' ) ) {
             $response_body = wp_remote_retrieve_body( $response );
 
             if ( empty($response_body) ) {
-                // Resposta vazia da API.
-                // translators: %d: Código de status HTTP.
+                AutoBP_Log_Manager::error( 'Resposta vazia da API Copyscape.', array( 'username' => $this->username, 'response_code' => $response_code, 'text_hash' => $text_hash_for_log ) );
                 return new WP_Error( 'copyscape_empty_response_body', sprintf(__( 'A API Copyscape retornou uma resposta vazia (HTTP %d). Verifique o status da API Copyscape.', 'autoblogpro' ), $response_code ));
             }
 
-            $data = json_decode( $response_body, true ); // Decodifica a resposta JSON.
+            $data = json_decode( $response_body, true ); 
 
             if ( json_last_error() !== JSON_ERROR_NONE ) {
-                // Falha na decodificação JSON. A API Copyscape pode retornar erros em XML.
+                AutoBP_Log_Manager::error( 'Falha ao decodificar JSON da API Copyscape: ' . json_last_error_msg(), array( 'username' => $this->username, 'response_body_snippet' => mb_substr($response_body, 0, 250), 'text_hash' => $text_hash_for_log ) );
                 if ( strpos( trim($response_body), '<errorresponse>' ) === 0 || strpos( trim($response_body), '<error>' ) !== false ) {
                     try {
-                        $xml = @simplexml_load_string( $response_body ); // Tenta carregar como XML.
+                        $xml = @simplexml_load_string( $response_body ); 
                         if ( $xml && isset($xml->error) ) {
-                            // translators: %s: Mensagem de erro da API Copyscape (extraída do XML).
+                            AutoBP_Log_Manager::error( 'Erro XML da API Copyscape: ' . (string) $xml->error, array( 'username' => $this->username, 'xml_error' => (string) $xml->error, 'text_hash' => $text_hash_for_log ) );
                             return new WP_Error( 'copyscape_api_xml_error', sprintf(__( 'Erro da API Copyscape: %s', 'autoblogpro' ), (string) $xml->error) );
                         }
                     } catch (Exception $e) {
-                        // Silencia a exceção, o erro de falha na decodificação JSON será retornado.
+                        AutoBP_Log_Manager::error( 'Exceção ao tentar parsear erro XML do Copyscape: ' . $e->getMessage(), array( 'username' => $this->username, 'text_hash' => $text_hash_for_log ) );
                     }
                 }
-                // translators: %1$s: Mensagem de erro do json_decode. %2$s: Trecho da resposta recebida.
                 return new WP_Error( 'copyscape_json_decode_failed', sprintf(__( 'Falha ao decodificar a resposta da API Copyscape (esperado JSON). Erro: %1$s. Resposta recebida (trecho): %2$s', 'autoblogpro' ), json_last_error_msg(), esc_html(substr($response_body, 0, 250)) ) );
             }
 
-            // Verifica por erros específicos retornados pela API Copyscape na estrutura JSON (campo 'error').
             if ( isset( $data['error'] ) ) {
-                // translators: %s: Mensagem de erro da API Copyscape.
+                AutoBP_Log_Manager::error( 'Erro retornado pela API Copyscape: ' . $data['error'], array( 'username' => $this->username, 'api_error' => $data['error'], 'text_hash' => $text_hash_for_log ) );
                 return new WP_Error( 'copyscape_api_error_message', sprintf( __( 'Erro retornado pela API Copyscape: %s', 'autoblogpro' ), sanitize_text_field($data['error']) ) );
             }
-
-            // Se o código HTTP não for 200 e não houver um $data['error'] claro, e a estrutura de sucesso não estiver presente.
-            if ( $response_code !== 200 && !isset($data['querywords']) ) {
+            
+            if ( $response_code !== 200 && !isset($data['querywords']) ) { 
+                 AutoBP_Log_Manager::error( 'Erro HTTP da API Copyscape sem mensagem de erro clara.', array( 'username' => $this->username, 'response_code' => $response_code, 'response_body_snippet' => mb_substr($response_body,0,250), 'text_hash' => $text_hash_for_log ) );
                  return new WP_Error( 'copyscape_http_error_unknown', sprintf(__( 'Erro HTTP %s ao contatar a API Copyscape, e a resposta não continha uma mensagem de erro clara da Copyscape. Resposta (trecho): %s', 'autoblogpro' ), $response_code, esc_html(substr($response_body,0,250))) );
             }
-
-            // Verifica se a estrutura de sucesso esperada está presente.
-            if ( !isset($data['count']) || !isset($data['result']) ) {
+            
+            if ( !isset($data['count']) || !isset($data['result']) ) { // 'result' é o nome do array de resultados na API, não 'results'
+                 AutoBP_Log_Manager::error( 'Estrutura de resposta inesperada da API Copyscape.', array( 'username' => $this->username, 'response_data_keys' => array_keys($data), 'text_hash' => $text_hash_for_log ) );
                  return new WP_Error( 'copyscape_unexpected_response_structure', __( 'Resposta inesperada da API Copyscape. A estrutura de dados de sucesso não foi reconhecida.', 'autoblogpro' ) );
             }
 
-            // Sucesso: retorna os dados processados da verificação.
+            AutoBP_Log_Manager::info( 'Verificação Copyscape bem-sucedida.', array( 'username' => $this->username, 'result_count' => $data['count'], 'cost' => $data['cost'], 'query_words' => $data['querywords'], 'text_hash' => $text_hash_for_log ) );
             return array(
                 'status'            => 'success', // Indica sucesso interno.
                 'query_words'       => isset($data['querywords']) ? intval($data['querywords']) : 0, // Número de palavras na consulta.

@@ -17,7 +17,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 /**
  * Classe Niche_Category_Meta_Box.
- *
+ * 
  * Lida com a criação, exibição e salvamento da metabox de categorias para nichos.
  */
 class Niche_Category_Meta_Box {
@@ -56,7 +56,7 @@ class Niche_Category_Meta_Box {
      * @param string $post_type O tipo de post atual. (Embora o hook 'add_meta_boxes_niche' pudesse ser usado, este método pode ser chamado genericamente e filtrar internamente se necessário, ou confiar no hook específico do 'add_meta_boxes').
      */
     public static function add( $post_type ) {
-        // Verifica se estamos no CPT 'niche' antes de adicionar a metabox,
+        // Verifica se estamos no CPT 'niche' antes de adicionar a metabox, 
         // embora o add_action('add_meta_boxes_niche', ...) seria mais direto.
         // Se usando add_action('add_meta_boxes', ...), esta verificação é útil.
         // Para esta implementação, o hook save_post_niche já garante o CPT no save.
@@ -148,7 +148,7 @@ class Niche_Category_Meta_Box {
         if ( wp_is_post_revision( $post_id ) ) {
             return; // Sai se for uma revisão.
         }
-
+        
         // 5. Verifica se o tipo de post é 'niche'.
         // Embora o hook 'save_post_niche' já restrinja a este CPT,
         // esta é uma verificação de segurança adicional.
